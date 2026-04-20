@@ -294,7 +294,10 @@ export default function App() {
                   <Row label="SDS" value={fmt(s.sds)} />
                   <Row label="SD1" value={fmt(s.sd1)} />
                   <Row label="Seismic Design Category" value={s.sdc ?? 'N/A'} />
-                  <Row label="Fa / Fv" value={`${fmt(s.fa)} / ${fmt(s.fv)}`} />
+                  <Row label="Fa / Fv"
+                    value={s.fa != null && s.fv != null
+                      ? `${fmt(s.fa)} / ${fmt(s.fv)}`
+                      : standard === '7-22' ? 'N/A (multi-period)' : 'N/A'} />
                   <Row label="TL (sec)" value={fmt(s.tl, 1)} />
                 </>}
               </ResultCard>
@@ -305,7 +308,7 @@ export default function App() {
                   <Row
                     label="Ground Snow Load (pg)"
                     value={sn.groundSnowLoad != null
-                      ? `${fmt(sn.groundSnowLoad, 1)} psf${sn.elevationTable ? ' *' : ''}`
+                      ? `${Math.round(sn.groundSnowLoad)} psf${sn.elevationTable ? ' *' : ''}`
                       : 'N/A'}
                     highlight
                   />
