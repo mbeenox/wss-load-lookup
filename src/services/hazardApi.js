@@ -4,11 +4,31 @@
 const PROXY = (url) => `/api/proxy?target=${encodeURIComponent(url)}`;
 
 // ─── GEOCODING ────────────────────────────────────────────────────────────────
+// Primary: US Census Geocoder — most accurate for US street addresses
+// Fallback: Nominatim (OpenStreetMap) — covers non-US and addresses Census misses
 export async function geocodeAddress(address) {
+  // Try US Census Geocoder first (best accuracy for US addresses)
+  try {
+    const censusUrl = `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress`
+      + `?address=${encodeURIComponent(address)}&benchmark=Public_AR_Current&format=json`;
+    const r = await fetch(PROXY(censusUrl));
+    const data = await r.json();
+    const matches = data?.result?.addressMatches;
+    if (matches && matches.length > 0) {
+      const m = matches[0];
+      return {
+        lat: parseFloat(m.coordinates.y),
+        lon: parseFloat(m.coordinates.x),
+        displayName: m.matchedAddress,
+      };
+    }
+  } catch (e) { /* fall through to Nominatim */ }
+
+  // Fallback: Nominatim
   const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`;
   const r = await fetch(PROXY(url));
   const data = await r.json();
-  if (!data.length) throw new Error('Address not found');
+  if (!data.length) throw new Error('Address not found. Try adding city and state, or use Lat/Lon.');
   return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon), displayName: data[0].display_name };
 }
 
