@@ -361,7 +361,8 @@ export async function fetchRain(lat, lon) {
   }
 
   const durations = ['5-min','10-min','15-min','30-min','60-min','2-hr','3-hr','6-hr','12-hr','24-hr','2-day','3-day','4-day','7-day','10-day','20-day','30-day','45-day','60-day'];
-  const periods = ['2yr','5yr','10yr','25yr','50yr','100yr','200yr','500yr','1000yr'];
+  // NOAA PDS returns 10 columns: 1,2,5,10,25,50,100,200,500,1000 yr
+  const periods = ['1yr','2yr','5yr','10yr','25yr','50yr','100yr','200yr','500yr','1000yr'];
   const table = raw.map((row, i) => ({
     duration: durations[i] || `row${i}`,
     values: Object.fromEntries(row.map((v, j) => [periods[j] || `p${j}`, parseFloat(v)])),

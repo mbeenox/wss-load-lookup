@@ -221,10 +221,10 @@ export function generatePDF(inputs, results) {
     const allRows = results.rain.table;
     autoTable(doc, {
       startY: y,
-      head: [['Duration', '2-yr', '5-yr', '10-yr', '25-yr', '50-yr', '100-yr', '200-yr', '500-yr', '1000-yr']],
+      head: [['Duration', '1-yr', '2-yr', '5-yr', '10-yr', '25-yr', '50-yr', '100-yr', '200-yr', '500-yr', '1000-yr']],
       body: allRows.map(r => [
         r.duration,
-        ...['2yr','5yr','10yr','25yr','50yr','100yr','200yr','500yr','1000yr'].map(p => fmt(r.values[p], 3)),
+        ...['1yr','2yr','5yr','10yr','25yr','50yr','100yr','200yr','500yr','1000yr'].map(p => fmt(r.values[p], 3)),
       ]),
       theme: 'striped',
       headStyles: { fillColor: [15, 40, 80], fontSize: 8 },
