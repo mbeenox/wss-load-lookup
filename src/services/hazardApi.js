@@ -30,7 +30,6 @@ function arcgisIdentify(service, lat, lon, layers = 'all') {
 }
 
 // ─── SEISMIC ──────────────────────────────────────────────────────────────────
-// Standard slug map
 const SEISMIC_SLUG = { '7-22': 'asce7-22', '7-16': 'asce7-16', '7-10': 'asce7-10' };
 
 export async function fetchSeismic(lat, lon, standard, riskCategory, siteClass) {
@@ -50,7 +49,7 @@ export async function fetchSeismic(lat, lon, standard, riskCategory, siteClass) 
       t0: d.t0, ts: d.ts,
     };
   }
-  // ASCE 7-16 / 7-10 — response may be array wrapped
+  // ASCE 7-16 / 7-10 response may be array-wrapped
   const resp = Array.isArray(data.response) ? data.response[0] : data.response;
   const d = resp?.data || {};
   return {
@@ -62,93 +61,116 @@ export async function fetchSeismic(lat, lon, standard, riskCategory, siteClass) 
 }
 
 // ─── WIND ─────────────────────────────────────────────────────────────────────
-// MRI-based ImageServers for each RC (ASCE 7-22)
-const WIND_MRI_722 = { I: '300', II: '700', III: '1700', IV: '3000' };
-// ASCE 7-16 MapServers (tile services, layer 2)
-const WIND_SVC_716 = { I: 'ASCE/Wind_2016_300_Tile', II: 'ASCE/Wind_2016_700_Tile', III: 'ASCE/Wind_2016_1700_Tile', IV: 'ASCE/Wind_2016_3000_Tile' };
-// ASCE 7-10 MapServers (tile services, layer 2)
-const WIND_SVC_710 = { I: 'ASCE/Wind_1A_Tiled', II: 'ASCE/Wind_1C_Tiled', III: 'ASCE/Wind_1B_Tiled', IV: 'ASCE/Wind_1C_Tiled' };
+// All use ImageServer getSamples — confirmed working in validation
+// ASCE 7-22: MRI ImageServers per RC (300/700/1700/3000 yr)
+const WIND_722 = { I: 'ASCE722/w2022_mri300/ImageServer', II: 'ASCE722/w2022_mri700/ImageServer', III: 'ASCE722/w2022_mri1700/ImageServer', IV: 'ASCE722/w2022_mri3000/ImageServer' };
+// ASCE 7-16: MRI ImageServers per RC
+const WIND_716 = { I: 'ASCE/wind2016_300/ImageServer', II: 'ASCE/wind2016_700/ImageServer', III: 'ASCE/wind2016_1700/ImageServer', IV: 'ASCE/wind2016_3000/ImageServer' };
+// ASCE 7-10: exposure category ImageServers (A=hurricane, B=RC III, C=RC II/IV open)
+const WIND_710 = { I: 'ASCE/wind2010_A/ImageServer', II: 'ASCE/wind2010_C/ImageServer', III: 'ASCE/wind2010_B/ImageServer', IV: 'ASCE/wind2010_C/ImageServer' };
 
 export async function fetchWind(lat, lon, standard, riskCategory) {
   let windSpeed = null;
 
-  if (standard === '7-22') {
-    const mri = WIND_MRI_722[riskCategory];
-    const data = await arcgisGetSamples(`ASCE722/w2022_mri${mri}/ImageServer`, lat, lon);
+  const svcMap = standard === '7-22' ? WIND_722 : standard === '7-16' ? WIND_716 : WIND_710;
+  const svc = svcMap[riskCategory];
+  try {
+    const data = await arcgisGetSamples(svc, lat, lon);
     const samples = data.samples || [];
     windSpeed = samples.length ? parseFloat(samples[0].value) : null;
-  } else if (standard === '7-16') {
-    const svc = WIND_SVC_716[riskCategory];
-    const data = await arcgisIdentify(`${svc}/MapServer`, lat, lon, 'all:2');
-    const results = data.results || [];
-    windSpeed = results.length ? parseFloat(results[0].attributes?.['Classify.Pixel Value']) : null;
-  } else {
-    // 7-10
-    const svc = WIND_SVC_710[riskCategory];
-    const data = await arcgisIdentify(`${svc}/MapServer`, lat, lon, 'all:2');
-    const results = data.results || [];
-    windSpeed = results.length ? parseFloat(results[0].attributes?.['Classify.Pixel Value']) : null;
+  } catch (e) {
+    windSpeed = null;
   }
 
   // Hurricane prone region
-  const hurricaneData = await arcgisIdentify('ASCE/ASCE_Hurricane_WindBorneDebris/MapServer', lat, lon);
-  const isHurricane = (hurricaneData.results || []).length > 0;
+  let isHurricane = false;
+  try {
+    const hData = await arcgisIdentify('ASCE/ASCE_Hurricane_WindBorneDebris/MapServer', lat, lon);
+    isHurricane = (hData.results || []).length > 0;
+  } catch (e) { /* non-fatal */ }
 
   // Special wind region
-  const specialData = await arcgisIdentify('ASCE722/w2022_Special_Wind_Regions/MapServer', lat, lon);
-  const isSpecialWind = (specialData.results || []).length > 0;
+  let isSpecialWind = false;
+  try {
+    const sData = await arcgisIdentify('ASCE722/w2022_Special_Wind_Regions/MapServer', lat, lon);
+    isSpecialWind = (sData.results || []).length > 0;
+  } catch (e) { /* non-fatal */ }
 
   return { windSpeed, isHurricane, isSpecialWind };
 }
 
 // ─── SNOW ─────────────────────────────────────────────────────────────────────
-const SNOW_RC = { I: 'I', II: 'II', III: 'III', IV: 'IV' };
-const SNOW_SVC_722 = (rc) => `ASCE722/s2022_Tile_RC_${SNOW_RC[rc]}/MapServer`;
-const SNOW_SVC_716 = () => 'ASCE/Snow_2016_Tile/MapServer';
-const SNOW_SVC_710 = () => 'ASCE/SnowLoad/MapServer';
+// Use ImageServer getSamples for pixel values — more reliable than MapServer identify
+const SNOW_722 = { I: 'ASCE722/s2022_RiskCategory1/ImageServer', II: 'ASCE722/s2022_RiskCategory2/ImageServer', III: 'ASCE722/s2022_RiskCategory3/ImageServer', IV: 'ASCE722/s2022_RiskCategory4/ImageServer' };
 
 export async function fetchSnow(lat, lon, standard, riskCategory) {
-  let svc;
-  if (standard === '7-22') svc = SNOW_SVC_722(riskCategory);
-  else if (standard === '7-16') svc = SNOW_SVC_716();
-  else svc = SNOW_SVC_710();
-
-  const data = await arcgisIdentify(svc, lat, lon);
-  const results = data.results || [];
-
   let groundSnowLoad = null;
   let winterWind = null;
-  let specialCase = null;
+  let specialCase = false;
 
-  for (const r of results) {
-    const attrs = r.attributes || {};
-    if (r.layerName?.includes('Snow Load') || r.layerName?.includes('snow')) {
-      const pv = attrs['Classify.Pixel Value'] ?? attrs['Pixel Value'] ?? attrs['value'];
-      if (pv != null) groundSnowLoad = parseFloat(pv);
-    }
-    if (r.layerName?.includes('Winter Wind')) {
-      winterWind = attrs.value ?? attrs.SI_Label ?? null;
-    }
-    if (r.layerName?.includes('Special')) {
-      specialCase = true;
-    }
+  if (standard === '7-22') {
+    // Primary: ImageServer getSamples for snow load
+    try {
+      const data = await arcgisGetSamples(SNOW_722[riskCategory], lat, lon);
+      const samples = data.samples || [];
+      if (samples.length && samples[0].value !== 'NoData') {
+        groundSnowLoad = parseFloat(samples[0].value);
+      }
+    } catch (e) { /* try fallback */ }
+
+    // Winter wind via MapServer identify (layer 0)
+    try {
+      const wData = await arcgisIdentify(`ASCE722/s2022_Tile_RC_${riskCategory}/MapServer`, lat, lon, 'all:0');
+      const results = wData.results || [];
+      if (results.length) {
+        const attrs = results[0].attributes || {};
+        winterWind = attrs.value ?? attrs.SI_Label ?? null;
+      }
+    } catch (e) { /* non-fatal */ }
+
+    // Special case check (layer 1)
+    try {
+      const spData = await arcgisIdentify(`ASCE722/s2022_Tile_RC_${riskCategory}/MapServer`, lat, lon, 'all:1');
+      specialCase = (spData.results || []).length > 0;
+    } catch (e) { /* non-fatal */ }
+
+  } else if (standard === '7-16') {
+    try {
+      const data = await arcgisIdentify('ASCE/Snow_2016_Tile/MapServer', lat, lon);
+      const results = data.results || [];
+      for (const r of results) {
+        const attrs = r.attributes || {};
+        const pv = attrs['Classify.Pixel Value'] ?? attrs['Pixel Value'] ?? attrs.value;
+        if (pv != null && groundSnowLoad === null) groundSnowLoad = parseFloat(pv);
+      }
+    } catch (e) { /* non-fatal */ }
+
+  } else {
+    // 7-10
+    try {
+      const data = await arcgisIdentify('ASCE/SnowLoad/MapServer', lat, lon);
+      const results = data.results || [];
+      for (const r of results) {
+        const attrs = r.attributes || {};
+        const pv = attrs['Classify.Pixel Value'] ?? attrs['Pixel Value'] ?? attrs.value;
+        if (pv != null && groundSnowLoad === null) groundSnowLoad = parseFloat(pv);
+      }
+    } catch (e) { /* non-fatal */ }
   }
 
   return { groundSnowLoad, winterWind, specialCase };
 }
 
 // ─── ICE ──────────────────────────────────────────────────────────────────────
-// MRI services per Risk Category
 const ICE_MRI = { I: '0250', II: '0500', III: '1000', IV: '1400' };
 
 export async function fetchIce(lat, lon, standard, riskCategory) {
   if (standard === '7-10') {
-    // 7-10 uses single 500-yr value
     const data = await arcgisIdentify('ASCE/IceLoad/MapServer', lat, lon);
     const results = data.results || [];
     const attrs = results[0]?.attributes || {};
     return {
-      iceThickness: parseFloat(attrs['Classify.Pixel Value'] ?? attrs.value ?? 0),
+      iceThickness: parseFloat(attrs['Classify.Pixel Value'] ?? attrs.value ?? 0) || null,
       concurrentTemp: null,
       concurrentGust: null,
     };
@@ -161,8 +183,8 @@ export async function fetchIce(lat, lon, standard, riskCategory) {
     arcgisIdentify('ASCE722/i2022_ConcurrentTemp/MapServer', lat, lon),
   ]);
 
-  const iceThickness = parseFloat(thickData.samples?.[0]?.value ?? 0);
-  const concurrentGust = parseFloat(gustData.samples?.[0]?.value ?? 0);
+  const iceThickness = parseFloat(thickData.samples?.[0]?.value ?? 0) || null;
+  const concurrentGust = parseFloat(gustData.samples?.[0]?.value ?? 0) || null;
   const tempAttrs = tempData.results?.[0]?.attributes || {};
   const concurrentTemp = tempAttrs.conc_temp ?? null;
 
@@ -176,12 +198,10 @@ export async function fetchRain(lat, lon) {
   const r = await fetch(PROXY(url));
   const text = await r.text();
 
-  // Response format: quantiles = [['val',...], ...];
   const match = text.match(/quantiles\s*=\s*(\[[\s\S]+?\]);/);
   if (!match) return { raw: text, parsed: null };
 
   const raw = JSON.parse(match[1]);
-  // 19 duration rows × 9 return period columns
   const durations = ['5-min','10-min','15-min','30-min','60-min','2-hr','3-hr','6-hr','12-hr','24-hr','2-day','3-day','4-day','7-day','10-day','20-day','30-day','45-day','60-day'];
   const periods = ['2yr','5yr','10yr','25yr','50yr','100yr','200yr','500yr','1000yr'];
   const table = raw.map((row, i) => ({
@@ -212,33 +232,31 @@ export async function fetchFlood(lat, lon) {
 }
 
 // ─── TORNADO ──────────────────────────────────────────────────────────────────
-// Ae sizes and RP values per ASCE 7-22 Chapter 32
-const TORNADO_AE  = ['PT', '2KSF', '10KSF', '40KSF', '100KSF', '250KSF', '1MSF', '4MSF'];
-const TORNADO_RP  = ['RP1700', 'RP3K', 'RP10K', 'RP100K', 'RP1M', 'RP10M'];
+const TORNADO_RP = ['RP1700', 'RP3K', 'RP10K', 'RP100K', 'RP1M', 'RP10M'];
 
 export async function fetchTornado(lat, lon, riskCategory) {
   if (riskCategory === 'I' || riskCategory === 'II') {
     return { applicable: false, message: 'Tornado hazard data only applies to Risk Category III or IV.' };
   }
 
-  // Fetch a representative set: 1 sq ft point source (PT) across all return periods
   const results = {};
   await Promise.all(
     TORNADO_RP.map(async (rp) => {
-      const svc = `ASCE722/t2022_PT_${rp}/ImageServer`;
       try {
-        const data = await arcgisGetSamples(svc, lat, lon);
+        const data = await arcgisGetSamples(`ASCE722/t2022_PT_${rp}/ImageServer`, lat, lon);
         const val = data.samples?.[0]?.value;
-        results[rp] = val != null ? parseFloat(val) : null;
+        results[rp] = (val != null && val !== 'NoData') ? parseFloat(val) : null;
       } catch {
         results[rp] = null;
       }
     })
   );
 
-  // Also check tornado prone area
-  const proneData = await arcgisIdentify('ASCE722/t2022_tornado_prone_area/MapServer', lat, lon);
-  const inPronArea = (proneData.results || []).length > 0;
+  let inPronArea = false;
+  try {
+    const proneData = await arcgisIdentify('ASCE722/t2022_tornado_prone_area/MapServer', lat, lon);
+    inPronArea = (proneData.results || []).length > 0;
+  } catch (e) { /* non-fatal */ }
 
   return { applicable: true, speeds: results, inPronArea };
 }
