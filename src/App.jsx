@@ -64,6 +64,7 @@ export default function App() {
   const [riskCategory, setRiskCategory] = useState('II');
   const [siteClass, setSiteClass] = useState('D');
   const [resolvedAddress, setResolvedAddress] = useState('');
+  const [siteElevFt, setSiteElevFt] = useState(null);
 
   const [statuses, setStatuses] = useState({});
   const [results, setResults] = useState({});
@@ -85,6 +86,7 @@ export default function App() {
     setGlobalError('');
     setResults({});
     setStatuses({});
+    setSiteElevFt(null);
     setRunning(true);
 
     let finalLat, finalLon, displayAddr;
@@ -127,7 +129,11 @@ export default function App() {
     await Promise.all([
       run('wind',    () => fetchWind(finalLat, finalLon, standard, riskCategory)),
       run('seismic', () => fetchSeismic(finalLat, finalLon, standard, riskCategory, siteClass)),
-      run('snow',    () => fetchSnow(finalLat, finalLon, standard, riskCategory)),
+      run('snow',    async () => {
+        const data = await fetchSnow(finalLat, finalLon, standard, riskCategory);
+        if (data.siteElevFt != null) setSiteElevFt(data.siteElevFt);
+        return data;
+      }),
       run('ice',     () => fetchIce(finalLat, finalLon, standard, riskCategory)),
       run('rain',    () => fetchRain(finalLat, finalLon)),
       run('flood',   () => fetchFlood(finalLat, finalLon)),
@@ -260,7 +266,12 @@ export default function App() {
               <div className="resolved-address">
                 <span className="addr-label">📍</span>
                 <span>{resolvedAddress}</span>
-                <span className="addr-tag">ASCE 7-{standard} · RC {riskCategory} · Site Class {siteClass}</span>
+                <div className="addr-tags">
+                  <span className="addr-tag">ASCE 7-{standard} · RC {riskCategory} · Site Class {siteClass}</span>
+                  {siteElevFt != null && (
+                    <span className="addr-tag addr-tag-elev">⛰ {Math.round(siteElevFt).toLocaleString()} ft NAVD88</span>
+                  )}
+                </div>
               </div>
             )}
 
@@ -291,7 +302,35 @@ export default function App() {
               {/* SNOW */}
               <ResultCard title="Snow" icon="❄" status={statuses.snow || 'idle'}>
                 {sn.error ? <div className="err">{sn.error}</div> : <>
-                  <Row label="Ground Snow Load (pg)" value={sn.groundSnowLoad != null ? `${fmt(sn.groundSnowLoad, 1)} psf` : 'N/A'} highlight />
+                  <Row
+                    label="Ground Snow Load (pg)"
+                    value={sn.groundSnowLoad != null
+                      ? `${fmt(sn.groundSnowLoad, 1)} psf${sn.elevationTable ? ' *' : ''}`
+                      : 'N/A'}
+                    highlight
+                  />
+                  {sn.siteElevFt != null && (
+                    <Row label="Site Elevation (DEM)" value={`${Math.round(sn.siteElevFt).toLocaleString()} ft`} />
+                  )}
+                  {sn.elevationTable && (
+                    <div className="elev-table-wrap">
+                      <div className="elev-table-label">* Elevation-dependent — pg by elevation:</div>
+                      <table className="elev-table">
+                        <thead><tr><th>Up to Elev (ft)</th><th>pg (psf)</th></tr></thead>
+                        <tbody>
+                          {sn.elevationTable.map((row, i) => (
+                            <tr key={i} className={sn.siteElevFt != null && (
+                              i === 0 ? sn.siteElevFt <= row.elevation :
+                              sn.siteElevFt <= row.elevation && sn.siteElevFt > sn.elevationTable[i-1].elevation
+                            ) ? 'elev-active' : ''}>
+                              <td>{row.elevation.toLocaleString()}</td>
+                              <td>{fmt(row.load, 1)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                   <Row label="Winter Wind Parameter" value={sn.winterWind ?? 'N/A'} />
                   <Row label="Special Case" value={sn.specialCase ? '⚠ Site study required' : 'No'} />
                 </>}

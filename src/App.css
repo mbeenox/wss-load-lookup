@@ -236,7 +236,13 @@ select.input { cursor: pointer; }
   flex-wrap: wrap;
 }
 .addr-label { font-size: 16px; }
-.resolved-address span:nth-child(2) { flex: 1; min-width: 200px; }
+.resolved-address > span:nth-child(2) { flex: 1; min-width: 200px; }
+.addr-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
 .addr-tag {
   background: rgba(255,255,255,0.15);
   padding: 3px 10px;
@@ -244,6 +250,11 @@ select.input { cursor: pointer; }
   font-size: 11px;
   font-family: 'Courier New', monospace;
   letter-spacing: 0.5px;
+}
+.addr-tag-elev {
+  background: rgba(232,160,32,0.25);
+  border: 1px solid rgba(232,160,32,0.5);
+  color: #fde9b0;
 }
 
 /* ── Results Grid ── */
