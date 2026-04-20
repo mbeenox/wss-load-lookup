@@ -100,6 +100,24 @@ export async function fetchWind(lat, lon, standard, riskCategory) {
 }
 
 // ─── SNOW ─────────────────────────────────────────────────────────────────────
+// Helper: extract snow load from 7-10/7-16 attribute objects.
+// These services store the value in 'Display' for flat regions,
+// or in Load1/Load2/Load3 with corresponding Elevation breakpoints for mountain regions.
+function extractSnowLoad(attrs) {
+  // Flat regions — Display field holds the value directly
+  const display = attrs['Display'];
+  if (display != null && display !== 'Null' && display !== '' && !isNaN(parseFloat(display))) {
+    return parseFloat(display);
+  }
+  // Elevation-dependent regions — return Load1 as the base value
+  // (elevation-specific interpolation requires site elevation from DEM)
+  const load1 = attrs['Load1'];
+  if (load1 != null && load1 !== 'Null' && load1 !== '' && !isNaN(parseFloat(load1))) {
+    return parseFloat(load1);
+  }
+  return null;
+}
+
 // Use ImageServer getSamples for pixel values — more reliable than MapServer identify
 const SNOW_722 = { I: 'ASCE722/s2022_RiskCategory1/ImageServer', II: 'ASCE722/s2022_RiskCategory2/ImageServer', III: 'ASCE722/s2022_RiskCategory3/ImageServer', IV: 'ASCE722/s2022_RiskCategory4/ImageServer' };
 
@@ -135,26 +153,27 @@ export async function fetchSnow(lat, lon, standard, riskCategory) {
     } catch (e) { /* non-fatal */ }
 
   } else if (standard === '7-16') {
+    // Layer 1 = Snow Load (lb/ft^2), key field = Display
     try {
-      const data = await arcgisIdentify('ASCE/Snow_2016_Tile/MapServer', lat, lon);
+      const data = await arcgisIdentify('ASCE/Snow_2016_Tile/MapServer', lat, lon, 'all:1');
       const results = data.results || [];
-      for (const r of results) {
-        const attrs = r.attributes || {};
-        const pv = attrs['Classify.Pixel Value'] ?? attrs['Pixel Value'] ?? attrs.value;
-        if (pv != null && groundSnowLoad === null) groundSnowLoad = parseFloat(pv);
-      }
+      if (results.length) groundSnowLoad = extractSnowLoad(results[0].attributes || {});
+    } catch (e) { /* non-fatal */ }
+    try {
+      const spData = await arcgisIdentify('ASCE/Snow_2016_Tile/MapServer', lat, lon, 'all:2');
+      specialCase = (spData.results || []).length > 0;
     } catch (e) { /* non-fatal */ }
 
   } else {
-    // 7-10
+    // 7-10 — Layer 2 = Snow Load (lb/ft^2), key field = Display
     try {
-      const data = await arcgisIdentify('ASCE/SnowLoad/MapServer', lat, lon);
+      const data = await arcgisIdentify('ASCE/SnowLoad/MapServer', lat, lon, 'all:2');
       const results = data.results || [];
-      for (const r of results) {
-        const attrs = r.attributes || {};
-        const pv = attrs['Classify.Pixel Value'] ?? attrs['Pixel Value'] ?? attrs.value;
-        if (pv != null && groundSnowLoad === null) groundSnowLoad = parseFloat(pv);
-      }
+      if (results.length) groundSnowLoad = extractSnowLoad(results[0].attributes || {});
+    } catch (e) { /* non-fatal */ }
+    try {
+      const spData = await arcgisIdentify('ASCE/SnowLoad/MapServer', lat, lon, 'all:1');
+      specialCase = (spData.results || []).length > 0;
     } catch (e) { /* non-fatal */ }
   }
 
