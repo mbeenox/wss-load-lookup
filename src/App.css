@@ -428,3 +428,9 @@ select.input { cursor: pointer; }
   color: var(--text);
 }
 .elev-table tr:last-child td { border-bottom: none; }
+
+.elev-table tr.elev-active td {
+  background: var(--accent-lt);
+  font-weight: 700;
+  color: var(--navy);
+}
