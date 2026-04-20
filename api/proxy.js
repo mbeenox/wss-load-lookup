@@ -16,6 +16,7 @@ export default async function handler(req, res) {
     'hazards.fema.gov',
     'hdsc.nws.noaa.gov',
     'nominatim.openstreetmap.org',
+    'geocoding.geo.census.gov',
   ];
 
   let url;
