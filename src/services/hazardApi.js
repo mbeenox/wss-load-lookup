@@ -100,29 +100,68 @@ export async function fetchWind(lat, lon, standard, riskCategory) {
 }
 
 // ─── SNOW ─────────────────────────────────────────────────────────────────────
-// Helper: extract snow load from 7-10/7-16 attribute objects.
-// Returns { load, elevTable } where elevTable is non-null for elevation-dependent regions.
-function extractSnowLoad(attrs) {
-  // Build elevation-dependent table if present (Load1/Elevation1 ... Load4/Elevation4)
+// Helper: fetch site elevation in FEET from ASCE722 s2022_Elevation ImageServer.
+// Returns meters converted to feet. Used to pick correct snow load tier.
+async function fetchSiteElevationFt(lat, lon) {
+  try {
+    const data = await arcgisGetSamples('ASCE722/s2022_Elevation/ImageServer', lat, lon);
+    const val = data.samples?.[0]?.value;
+    if (val != null && val !== 'NoData') {
+      return parseFloat(val) * 3.28084; // meters → feet
+    }
+  } catch (e) { /* non-fatal — fall back to Display */ }
+  return null;
+}
+
+// Helper: extract snow load from 7-10/7-16 attribute objects using site elevation.
+// Elevation breakpoints: Elevation1/Load1 = upper bound of tier 1, etc.
+// ASCE convention: load applies at elevations UP TO the listed value.
+// Returns { load, elevTable, elevFt }
+function extractSnowLoad(attrs, siteElevFt) {
+  // Build elevation table from attributes (skip zero-elevation filler entries)
   const elevTable = [];
   for (let i = 1; i <= 4; i++) {
     const elev = attrs[`Elevation${i}`];
     const load = attrs[`Load${i}`];
-    if (elev != null && elev !== 'Null' && elev !== '0' && elev !== 0 &&
-        load != null && load !== 'Null') {
+    if (elev != null && String(elev) !== 'Null' && parseFloat(elev) > 0 &&
+        load != null && String(load) !== 'Null') {
       elevTable.push({ elevation: parseFloat(elev), load: parseFloat(load) });
     }
   }
 
-  // Display field = ground-level design value
-  const display = attrs['Display'];
-  const baseLoad = (display != null && display !== 'Null' && display !== '' && !isNaN(parseFloat(display)))
-    ? parseFloat(display)
-    : (elevTable.length ? elevTable[0].load : null);
+  let selectedLoad = null;
+
+  if (elevTable.length > 0 && siteElevFt != null) {
+    // Sort tiers ascending by elevation
+    elevTable.sort((a, b) => a.elevation - b.elevation);
+    // Find the first tier whose upper bound exceeds site elevation
+    // Tier logic: Load applies for elevations UP TO Elevation value
+    // Below lowest threshold → use Display (flat zone load)
+    // Within a tier → use that tier's load
+    const display = parseFloat(attrs['Display'] ?? 0);
+    if (siteElevFt <= elevTable[0].elevation) {
+      selectedLoad = display; // below first breakpoint
+    } else {
+      // Walk tiers: find the tier where prev.elevation < siteElev <= curr.elevation
+      selectedLoad = elevTable[elevTable.length - 1].load; // default: highest tier
+      for (let i = 1; i < elevTable.length; i++) {
+        if (siteElevFt <= elevTable[i].elevation) {
+          selectedLoad = elevTable[i].load;
+          break;
+        }
+      }
+    }
+  } else {
+    // No elevation table or no DEM — use Display field
+    const display = attrs['Display'];
+    selectedLoad = (display != null && display !== 'Null' && display !== '')
+      ? parseFloat(display) : null;
+  }
 
   return {
-    load: baseLoad,
+    load: selectedLoad,
     elevTable: elevTable.length > 0 ? elevTable : null,
+    elevFt: siteElevFt,
   };
 }
 
@@ -134,6 +173,7 @@ export async function fetchSnow(lat, lon, standard, riskCategory) {
   let winterWind = null;
   let specialCase = false;
   let elevationTable = null;
+  let siteElevFt = null;
 
   if (standard === '7-22') {
     // Primary: ImageServer getSamples for snow load
@@ -164,10 +204,14 @@ export async function fetchSnow(lat, lon, standard, riskCategory) {
   } else if (standard === '7-16') {
     // Layer 1 = Snow Load (lb/ft^2), key field = Display
     try {
-      const data = await arcgisIdentify('ASCE/Snow_2016_Tile/MapServer', lat, lon, 'all:1');
-      const results = data.results || [];
-      if (results.length) {
-        const extracted = extractSnowLoad(results[0].attributes || {});
+      const [snowData716, elevFt716] = await Promise.all([
+        arcgisIdentify('ASCE/Snow_2016_Tile/MapServer', lat, lon, 'all:1'),
+        fetchSiteElevationFt(lat, lon),
+      ]);
+      siteElevFt = elevFt716;
+      const results716 = snowData716.results || [];
+      if (results716.length) {
+        const extracted = extractSnowLoad(results716[0].attributes || {}, siteElevFt);
         groundSnowLoad = extracted.load;
         if (extracted.elevTable) elevationTable = extracted.elevTable;
       }
@@ -180,10 +224,14 @@ export async function fetchSnow(lat, lon, standard, riskCategory) {
   } else {
     // 7-10 — Layer 2 = Snow Load (lb/ft^2), key field = Display
     try {
-      const data = await arcgisIdentify('ASCE/SnowLoad/MapServer', lat, lon, 'all:2');
-      const results = data.results || [];
-      if (results.length) {
-        const extracted = extractSnowLoad(results[0].attributes || {});
+      const [snowData710, elevFt710] = await Promise.all([
+        arcgisIdentify('ASCE/SnowLoad/MapServer', lat, lon, 'all:2'),
+        fetchSiteElevationFt(lat, lon),
+      ]);
+      siteElevFt = elevFt710;
+      const results710 = snowData710.results || [];
+      if (results710.length) {
+        const extracted = extractSnowLoad(results710[0].attributes || {}, siteElevFt);
         groundSnowLoad = extracted.load;
         if (extracted.elevTable) elevationTable = extracted.elevTable;
       }
@@ -194,7 +242,7 @@ export async function fetchSnow(lat, lon, standard, riskCategory) {
     } catch (e) { /* non-fatal */ }
   }
 
-  return { groundSnowLoad, winterWind, specialCase, elevationTable };
+  return { groundSnowLoad, winterWind, specialCase, elevationTable, siteElevFt };
 }
 
 // ─── ICE ──────────────────────────────────────────────────────────────────────
