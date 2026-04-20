@@ -40,17 +40,25 @@ export function generatePDF(inputs, results) {
 
   // ── Site Info ──
   y = sectionHeader(doc, 'SITE INFORMATION', y);
+  const snowResult = results.snow || {};
+  const elevFt = snowResult.siteElevFt != null ? `${Math.round(snowResult.siteElevFt).toLocaleString()} ft NAVD88` : 'N/A';
+  const latStr = inputs.lat != null ? inputs.lat.toFixed(6) : 'N/A';
+  const lonStr = inputs.lon != null ? inputs.lon.toFixed(6) : 'N/A';
   autoTable(doc, {
     startY: y,
     head: [],
     body: [
       ['Address', inputs.address || 'N/A', 'Standard', `ASCE 7-${inputs.standard}`],
-      ['Latitude', fmt(inputs.lat, 5), 'Risk Category', inputs.riskCategory],
-      ['Longitude', fmt(inputs.lon, 5), 'Site Class', inputs.siteClass],
+      ['Latitude', latStr, 'Risk Category', `RC ${inputs.riskCategory}`],
+      ['Longitude', lonStr, 'Site Class', inputs.siteClass],
+      ['Site Elevation', elevFt, 'Report Date', new Date().toLocaleDateString()],
     ],
     theme: 'plain',
     styles: { fontSize: 9, cellPadding: 2 },
-    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 35 }, 2: { fontStyle: 'bold', cellWidth: 35 } },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 35 },
+      2: { fontStyle: 'bold', cellWidth: 35 },
+    },
     margin: { left: 14, right: 14 },
   });
   y = doc.lastAutoTable.finalY + 6;
@@ -213,32 +221,54 @@ export function generatePDF(inputs, results) {
 
   // ── Rain ──
   if (results.rain?.table) {
-    if (y > 180) { doc.addPage(); y = 14; }
-    y = sectionHeader(doc, 'RAIN (NOAA Atlas 14 — Precipitation Frequency, in/hr)', y);
-    const highlightRows = results.rain.table.filter(r =>
-      ['60-min','24-hr'].includes(r.duration)
-    );
-    const allRows = results.rain.table;
+    if (y > 220) { doc.addPage(); y = 14; }
+    y = sectionHeader(doc, 'RAIN (NOAA Atlas 14)', y);
+
+    // Helper to get a value from the table
+    const rainGet = (duration, period) => {
+      const row = results.rain.table.find(r => r.duration === duration);
+      return row ? fmt(row.values[period], 3) : 'N/A';
+    };
+
     autoTable(doc, {
       startY: y,
-      head: [['Duration', '1-yr', '2-yr', '5-yr', '10-yr', '25-yr', '50-yr', '100-yr', '200-yr', '500-yr', '1000-yr']],
-      body: allRows.map(r => [
-        r.duration,
-        ...['1yr','2yr','5yr','10yr','25yr','50yr','100yr','200yr','500yr','1000yr'].map(p => fmt(r.values[p], 3)),
-      ]),
+      head: [['Parameter', 'Value', 'Reference']],
+      body: [
+        [
+          '15-min Rainfall Intensity (100-yr MRI)',
+          `${rainGet('15-min', '100yr')} in/hr`,
+          'NOAA Atlas 14, PDS'
+        ],
+        [
+          '60-min Rainfall Intensity (100-yr MRI)',
+          `${rainGet('60-min', '100yr')} in/hr`,
+          'NOAA Atlas 14, PDS · ASCE 7 §8.3'
+        ],
+      ],
       theme: 'striped',
-      headStyles: { fillColor: [15, 40, 80], fontSize: 8 },
-      styles: { fontSize: 7.5, cellPadding: 1.5 },
+      headStyles: { fillColor: [15, 40, 80], fontSize: 9 },
+      styles: { fontSize: 9, cellPadding: 2 },
+      columnStyles: { 1: { fontStyle: 'bold' } },
       margin: { left: 14, right: 14 },
       didParseCell: (data) => {
-        const dur = allRows[data.row.index]?.duration;
-        if (dur && ['60-min','24-hr'].includes(dur)) {
-          data.cell.styles.fontStyle = 'bold';
-          data.cell.styles.fillColor = [220, 235, 255];
+        if (data.row.index >= 0 && data.column.index === 1) {
+          data.cell.styles.fillColor = [255, 243, 220];
+          data.cell.styles.textColor = [15, 40, 80];
         }
       },
     });
-    y = doc.lastAutoTable.finalY + 6;
+    y = doc.lastAutoTable.finalY + 4;
+
+    // Note
+    doc.setFontSize(7.5);
+    doc.setTextColor(120);
+    doc.setFont('helvetica', 'italic');
+    doc.text(
+      'Full precipitation frequency table (19 durations × 10 return periods) available in the WSS Load Lookup app.',
+      14, y
+    );
+    doc.setFont('helvetica', 'normal');
+    y += 8;
   }
 
   // ── Footer ──
