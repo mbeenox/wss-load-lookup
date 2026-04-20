@@ -84,7 +84,7 @@ export function generatePDF(inputs, results) {
       head: [['Parameter', 'Value', 'Parameter', 'Value']],
       body: [
         ['Ss (0.2 sec)', fmt(s.ss), 'S1 (1.0 sec)', fmt(s.s1)],
-        ['Fa', fmt(s.fa), 'Fv', fmt(s.fv)],
+        ['Fa', s.fa != null ? fmt(s.fa) : (inputs.standard === '7-22' ? 'N/A (multi-period)' : 'N/A'), 'Fv', s.fv != null ? fmt(s.fv) : (inputs.standard === '7-22' ? 'N/A (multi-period)' : 'N/A')],
         ['SMS', fmt(s.sms), 'SM1', fmt(s.sm1)],
         ['SDS', fmt(s.sds), 'SD1', fmt(s.sd1)],
         ['SDC', s.sdc ?? 'N/A', 'TL (sec)', fmt(s.tl, 1)],
@@ -107,7 +107,7 @@ export function generatePDF(inputs, results) {
       startY: y,
       head: [['Parameter', 'Value', 'Notes']],
       body: [
-        ['Ground Snow Load (pg)', sn.groundSnowLoad != null ? `${fmt(sn.groundSnowLoad, 1)} psf` : 'N/A', `ASCE 7-${inputs.standard}`],
+        ['Ground Snow Load (pg)', sn.groundSnowLoad != null ? `${Math.round(sn.groundSnowLoad)} psf` : 'N/A', `ASCE 7-${inputs.standard}`],
         ['Winter Wind Parameter', sn.winterWind ?? 'N/A', ''],
         ['Special Case', sn.specialCase ? 'YES — Site study required' : 'NO', ''],
       ],
