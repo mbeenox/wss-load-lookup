@@ -50,6 +50,84 @@ function Row({ label, value, highlight }) {
   );
 }
 
+function RainCard({ rain }) {
+  const [showTable, setShowTable] = useState(false);
+  const table = rain.table || [];
+
+  const get = (duration, period) => {
+    const row = table.find(r => r.duration === duration);
+    return row ? fmt(row.values[period], 3) : 'N/A';
+  };
+
+  const periods = ['2yr','5yr','10yr','25yr','50yr','100yr','200yr','500yr','1000yr','10000yr'];
+  const headers = ['2-yr','5-yr','10-yr','25-yr','50-yr','100-yr','200-yr','500-yr','1000-yr','10000-yr'];
+
+  return (
+    <div className="rain-card-inner">
+      {/* ASCE 7 Design Values */}
+      <div className="rain-design-values">
+        <div className="rain-design-label">ASCE 7 Design Values (100-yr MRI)</div>
+        <div className="rain-design-row">
+          <div className="rain-design-item">
+            <span className="rain-design-item-label">15-min Intensity</span>
+            <span className="rain-design-item-value">{get('15-min', '100yr')} in/hr</span>
+            <span className="rain-design-item-sub">100-yr, 15-min</span>
+          </div>
+          <div className="rain-design-divider" />
+          <div className="rain-design-item">
+            <span className="rain-design-item-label">60-min Intensity</span>
+            <span className="rain-design-item-value">{get('60-min', '100yr')} in/hr</span>
+            <span className="rain-design-item-sub">100-yr, 60-min · ASCE 7 §8.3</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Toggle button */}
+      <button className="rain-toggle-btn" onClick={() => setShowTable(s => !s)}>
+        {showTable ? '▲ Hide Full Atlas 14 Table' : '▼ Show Full Atlas 14 Table (19 durations × 10 return periods)'}
+      </button>
+
+      {/* Full table - collapsible */}
+      {showTable && (
+        <div className="rain-table-wrap">
+          <table className="rain-table">
+            <thead>
+              <tr>
+                <th>Duration</th>
+                {headers.map((h, i) => (
+                  <th key={h} className={i === 5 ? 'rain-col-100yr' : ''}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {table.map(row => {
+                const isHighlight = ['15-min', '60-min'].includes(row.duration);
+                return (
+                  <tr key={row.duration} className={isHighlight ? 'rain-highlight' : ''}>
+                    <td>{row.duration}</td>
+                    {periods.map((p, i) => (
+                      <td key={p} className={
+                        i === 5 && isHighlight ? 'rain-cell-star' :
+                        i === 5 ? 'rain-col-100yr' : ''
+                      }>
+                        {fmt(row.values[p], 3)}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="rain-table-note">
+            Highlighted rows = ASCE 7 design durations. Highlighted cells = 100-yr MRI design values per ASCE 7 §8.3.
+            Source: NOAA Atlas 14, Precipitation Frequency Data Server.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function fmt(v, d = 3) {
   if (v == null || isNaN(v)) return 'N/A';
   return typeof v === 'number' ? v.toFixed(d) : String(v);
@@ -385,29 +463,10 @@ export default function App() {
               </ResultCard>
 
               {/* RAIN — full width */}
-              <ResultCard title="Rain (NOAA Atlas 14 — in/hr)" icon="🌧" status={statuses.rain || 'idle'}>
+              <ResultCard title="Rain (NOAA Atlas 14)" icon="🌧" status={statuses.rain || 'idle'}>
                 {rain.error ? <div className="err">{rain.error}</div>
                   : rain.table ? (
-                    <div className="rain-table-wrap">
-                      <table className="rain-table">
-                        <thead>
-                          <tr>
-                            <th>Duration</th>
-                            {['2-yr','5-yr','10-yr','25-yr','50-yr','100-yr','200-yr','500-yr','1000-yr'].map(p => <th key={p}>{p}</th>)}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {rain.table.map(row => (
-                            <tr key={row.duration} className={['60-min','24-hr'].includes(row.duration) ? 'rain-highlight' : ''}>
-                              <td>{row.duration}</td>
-                              {['2yr','5yr','10yr','25yr','50yr','100yr','200yr','500yr','1000yr'].map(p => (
-                                <td key={p}>{fmt(row.values[p], 3)}</td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    <RainCard rain={rain} />
                   ) : <div className="muted">No data</div>}
               </ResultCard>
 

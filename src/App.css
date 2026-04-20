@@ -445,3 +445,106 @@ select.input { cursor: pointer; }
   font-weight: 700;
   color: var(--navy);
 }
+
+/* ── Rain Card ── */
+.rain-card-inner { display: flex; flex-direction: column; gap: 12px; }
+
+.rain-design-values {
+  background: var(--highlight);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+.rain-design-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--navy);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-family: 'Courier New', monospace;
+  margin-bottom: 10px;
+}
+.rain-design-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+.rain-design-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0 12px;
+}
+.rain-design-item:first-child { padding-left: 0; }
+.rain-design-divider {
+  width: 1px;
+  background: var(--border);
+  margin: 0 4px;
+}
+.rain-design-item-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'Courier New', monospace;
+}
+.rain-design-item-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--navy);
+  font-family: 'Georgia', serif;
+  line-height: 1.1;
+}
+.rain-design-item-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+  font-family: 'Courier New', monospace;
+}
+
+.rain-toggle-btn {
+  width: 100%;
+  padding: 8px 14px;
+  background: var(--navy);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.3px;
+  text-align: left;
+  transition: background 0.15s;
+}
+.rain-toggle-btn:hover { background: var(--navy-mid); }
+
+.rain-table-note {
+  margin-top: 8px;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+  line-height: 1.5;
+}
+
+/* 100-yr column highlight */
+.rain-table th.rain-col-100yr {
+  background: #1a5c8a;
+  position: relative;
+}
+.rain-table th.rain-col-100yr::after {
+  content: '★';
+  display: block;
+  font-size: 8px;
+  opacity: 0.7;
+}
+.rain-table td.rain-col-100yr {
+  background: #e8f4ff;
+  font-weight: 600;
+}
+/* Star cell — 100-yr + highlighted row intersection */
+.rain-table td.rain-cell-star {
+  background: var(--accent);
+  color: var(--navy);
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: inset 0 0 0 2px rgba(15,40,80,0.2);
+}
