@@ -3,6 +3,8 @@ import {
   geocodeAddress, fetchSeismic, fetchWind, fetchSnow,
   fetchIce, fetchRain, fetchFlood, fetchTornado, fetchTsunami,
 } from './services/hazardApi';
+import AddressAutocomplete from './components/AddressAutocomplete';
+import MapPicker from './components/MapPicker';
 import { generatePDF } from './services/pdfReport';
 import './App.css';
 
@@ -137,7 +139,7 @@ export default function App() {
   const [address, setAddress] = useState('');
   const [lat, setLat] = useState('');
   const [lon, setLon] = useState('');
-  const [useLatLon, setUseLatLon] = useState(false);
+  const [locationMode, setLocationMode] = useState('address'); // 'address' | 'latlon' | 'map'
   const [standard, setStandard] = useState('7-22');
   const [riskCategory, setRiskCategory] = useState('II');
   const [siteClass, setSiteClass] = useState('D');
@@ -174,17 +176,29 @@ export default function App() {
     let finalLat, finalLon, displayAddr;
 
     try {
-      if (useLatLon) {
+      if (locationMode === 'latlon') {
         finalLat = parseFloat(lat);
         finalLon = parseFloat(lon);
         if (isNaN(finalLat) || isNaN(finalLon)) throw new Error('Invalid lat/lon values');
         displayAddr = `${finalLat.toFixed(5)}, ${finalLon.toFixed(5)}`;
+      } else if (locationMode === 'map') {
+        finalLat = parseFloat(lat);
+        finalLon = parseFloat(lon);
+        if (isNaN(finalLat) || isNaN(finalLon)) throw new Error('Please click a location on the map first');
+        displayAddr = address || `${finalLat.toFixed(5)}, ${finalLon.toFixed(5)}`;
       } else {
         if (!address.trim()) throw new Error('Please enter an address');
-        const geo = await geocodeAddress(address);
-        finalLat = geo.lat;
-        finalLon = geo.lon;
-        displayAddr = geo.displayName;
+        // If autocomplete already resolved coords, use them directly
+        if (lat && lon && !isNaN(parseFloat(lat)) && !isNaN(parseFloat(lon))) {
+          finalLat = parseFloat(lat);
+          finalLon = parseFloat(lon);
+          displayAddr = address;
+        } else {
+          const geo = await geocodeAddress(address);
+          finalLat = geo.lat;
+          finalLon = geo.lon;
+          displayAddr = geo.displayName;
+        }
       }
       setResolvedAddress(displayAddr);
       setResolvedLat(finalLat);
@@ -276,30 +290,34 @@ export default function App() {
           <div className="input-panel-inner">
             <h2 className="panel-title">Site Information</h2>
 
-            {/* Location toggle */}
-            <div className="toggle-row">
-              <button
-                className={`toggle-btn ${!useLatLon ? 'active' : ''}`}
-                onClick={() => setUseLatLon(false)}
-              >Address</button>
-              <button
-                className={`toggle-btn ${useLatLon ? 'active' : ''}`}
-                onClick={() => setUseLatLon(true)}
-              >Lat / Lon</button>
+            {/* Location mode tabs */}
+            <div className="loc-tabs">
+              {[['address','Address'],['latlon','Lat / Lon'],['map','Find on Map']].map(([mode, label]) => (
+                <button
+                  key={mode}
+                  className={`loc-tab ${locationMode === mode ? 'active' : ''}`}
+                  onClick={() => setLocationMode(mode)}
+                >{label}</button>
+              ))}
             </div>
 
-            {!useLatLon ? (
+            {locationMode === 'address' && (
               <div className="field">
                 <label>Street Address</label>
-                <input
-                  className="input"
-                  placeholder="e.g. 1234 Main St, Houston TX"
+                <AddressAutocomplete
                   value={address}
-                  onChange={e => setAddress(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleRun()}
+                  onChange={setAddress}
+                  onSelect={({ lat: lt, lon: ln, displayName }) => {
+                    setAddress(displayName);
+                    setLat(String(lt));
+                    setLon(String(ln));
+                  }}
+                  placeholder="e.g. 1234 Main St, Houston TX"
                 />
               </div>
-            ) : (
+            )}
+
+            {locationMode === 'latlon' && (
               <div className="field-row">
                 <div className="field">
                   <label>Latitude</label>
@@ -309,6 +327,17 @@ export default function App() {
                   <label>Longitude</label>
                   <input className="input" placeholder="e.g. -96.7970" value={lon} onChange={e => setLon(e.target.value)} />
                 </div>
+              </div>
+            )}
+
+            {locationMode === 'map' && (
+              <div className="field">
+                <label>Click on map to select site location</label>
+                <MapPicker onLocationSelect={({ lat: lt, lon: ln, displayName }) => {
+                  setLat(String(lt));
+                  setLon(String(ln));
+                  setAddress(displayName);
+                }} />
               </div>
             )}
 
