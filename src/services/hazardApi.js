@@ -101,21 +101,29 @@ export async function fetchWind(lat, lon, standard, riskCategory) {
 
 // ─── SNOW ─────────────────────────────────────────────────────────────────────
 // Helper: extract snow load from 7-10/7-16 attribute objects.
-// These services store the value in 'Display' for flat regions,
-// or in Load1/Load2/Load3 with corresponding Elevation breakpoints for mountain regions.
+// Returns { load, elevTable } where elevTable is non-null for elevation-dependent regions.
 function extractSnowLoad(attrs) {
-  // Flat regions — Display field holds the value directly
+  // Build elevation-dependent table if present (Load1/Elevation1 ... Load4/Elevation4)
+  const elevTable = [];
+  for (let i = 1; i <= 4; i++) {
+    const elev = attrs[`Elevation${i}`];
+    const load = attrs[`Load${i}`];
+    if (elev != null && elev !== 'Null' && elev !== '0' && elev !== 0 &&
+        load != null && load !== 'Null') {
+      elevTable.push({ elevation: parseFloat(elev), load: parseFloat(load) });
+    }
+  }
+
+  // Display field = ground-level design value
   const display = attrs['Display'];
-  if (display != null && display !== 'Null' && display !== '' && !isNaN(parseFloat(display))) {
-    return parseFloat(display);
-  }
-  // Elevation-dependent regions — return Load1 as the base value
-  // (elevation-specific interpolation requires site elevation from DEM)
-  const load1 = attrs['Load1'];
-  if (load1 != null && load1 !== 'Null' && load1 !== '' && !isNaN(parseFloat(load1))) {
-    return parseFloat(load1);
-  }
-  return null;
+  const baseLoad = (display != null && display !== 'Null' && display !== '' && !isNaN(parseFloat(display)))
+    ? parseFloat(display)
+    : (elevTable.length ? elevTable[0].load : null);
+
+  return {
+    load: baseLoad,
+    elevTable: elevTable.length > 0 ? elevTable : null,
+  };
 }
 
 // Use ImageServer getSamples for pixel values — more reliable than MapServer identify
@@ -125,6 +133,7 @@ export async function fetchSnow(lat, lon, standard, riskCategory) {
   let groundSnowLoad = null;
   let winterWind = null;
   let specialCase = false;
+  let elevationTable = null;
 
   if (standard === '7-22') {
     // Primary: ImageServer getSamples for snow load
@@ -157,7 +166,11 @@ export async function fetchSnow(lat, lon, standard, riskCategory) {
     try {
       const data = await arcgisIdentify('ASCE/Snow_2016_Tile/MapServer', lat, lon, 'all:1');
       const results = data.results || [];
-      if (results.length) groundSnowLoad = extractSnowLoad(results[0].attributes || {});
+      if (results.length) {
+        const extracted = extractSnowLoad(results[0].attributes || {});
+        groundSnowLoad = extracted.load;
+        if (extracted.elevTable) elevationTable = extracted.elevTable;
+      }
     } catch (e) { /* non-fatal */ }
     try {
       const spData = await arcgisIdentify('ASCE/Snow_2016_Tile/MapServer', lat, lon, 'all:2');
@@ -169,7 +182,11 @@ export async function fetchSnow(lat, lon, standard, riskCategory) {
     try {
       const data = await arcgisIdentify('ASCE/SnowLoad/MapServer', lat, lon, 'all:2');
       const results = data.results || [];
-      if (results.length) groundSnowLoad = extractSnowLoad(results[0].attributes || {});
+      if (results.length) {
+        const extracted = extractSnowLoad(results[0].attributes || {});
+        groundSnowLoad = extracted.load;
+        if (extracted.elevTable) elevationTable = extracted.elevTable;
+      }
     } catch (e) { /* non-fatal */ }
     try {
       const spData = await arcgisIdentify('ASCE/SnowLoad/MapServer', lat, lon, 'all:1');
@@ -177,7 +194,7 @@ export async function fetchSnow(lat, lon, standard, riskCategory) {
     } catch (e) { /* non-fatal */ }
   }
 
-  return { groundSnowLoad, winterWind, specialCase };
+  return { groundSnowLoad, winterWind, specialCase, elevationTable };
 }
 
 // ─── ICE ──────────────────────────────────────────────────────────────────────
