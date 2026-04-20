@@ -42,8 +42,13 @@ export async function fetchSeismic(lat, lon, standard, riskCategory, siteClass) 
   // ASCE 7-22 response shape
   if (data.response?.data) {
     const d = data.response.data;
+    // 7-22 may nest Fa/Fv inside underlyingData.siteAmplification
+    const ud = d.underlyingData || {};
+    const sa = ud.siteAmplification || {};
+    const fa = d.fa ?? sa.fa ?? null;
+    const fv = d.fv ?? sa.fv ?? null;
     return {
-      ss: d.ss, s1: d.s1, fa: d.fa, fv: d.fv,
+      ss: d.ss, s1: d.s1, fa, fv,
       sms: d.sms, sm1: d.sm1, sds: d.sds, sd1: d.sd1,
       sdc: d.sdc, tl: d.tl, pga: d.pga, pgam: d.pgam,
       t0: d.t0, ts: d.ts,
@@ -176,30 +181,33 @@ export async function fetchSnow(lat, lon, standard, riskCategory) {
   let siteElevFt = null;
 
   if (standard === '7-22') {
-    // Primary: ImageServer getSamples for snow load
-    try {
-      const data = await arcgisGetSamples(SNOW_722[riskCategory], lat, lon);
-      const samples = data.samples || [];
+    // Fetch snow load, winter wind, special case, and site elevation in parallel
+    const [snowSamples, wData, spData, elevFt] = await Promise.allSettled([
+      arcgisGetSamples(SNOW_722[riskCategory], lat, lon),
+      arcgisIdentify(`ASCE722/s2022_Tile_RC_${riskCategory}/MapServer`, lat, lon, 'all:0'),
+      arcgisIdentify(`ASCE722/s2022_Tile_RC_${riskCategory}/MapServer`, lat, lon, 'all:1'),
+      fetchSiteElevationFt(lat, lon),
+    ]);
+
+    if (snowSamples.status === 'fulfilled') {
+      const samples = snowSamples.value.samples || [];
       if (samples.length && samples[0].value !== 'NoData') {
         groundSnowLoad = parseFloat(samples[0].value);
       }
-    } catch (e) { /* try fallback */ }
-
-    // Winter wind via MapServer identify (layer 0)
-    try {
-      const wData = await arcgisIdentify(`ASCE722/s2022_Tile_RC_${riskCategory}/MapServer`, lat, lon, 'all:0');
-      const results = wData.results || [];
+    }
+    if (wData.status === 'fulfilled') {
+      const results = wData.value.results || [];
       if (results.length) {
         const attrs = results[0].attributes || {};
         winterWind = attrs.value ?? attrs.SI_Label ?? null;
       }
-    } catch (e) { /* non-fatal */ }
-
-    // Special case check (layer 1)
-    try {
-      const spData = await arcgisIdentify(`ASCE722/s2022_Tile_RC_${riskCategory}/MapServer`, lat, lon, 'all:1');
-      specialCase = (spData.results || []).length > 0;
-    } catch (e) { /* non-fatal */ }
+    }
+    if (spData.status === 'fulfilled') {
+      specialCase = (spData.value.results || []).length > 0;
+    }
+    if (elevFt.status === 'fulfilled' && elevFt.value != null) {
+      siteElevFt = elevFt.value;
+    }
 
   } else if (standard === '7-16') {
     // Layer 1 = Snow Load (lb/ft^2), key field = Display
