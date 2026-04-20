@@ -140,6 +140,7 @@ export default function App() {
   const [lat, setLat] = useState('');
   const [lon, setLon] = useState('');
   const [locationMode, setLocationMode] = useState('address'); // 'address' | 'latlon' | 'map'
+  const [syncLocation, setSyncLocation] = useState(null); // synced into MapPicker
   const [standard, setStandard] = useState('7-22');
   const [riskCategory, setRiskCategory] = useState('II');
   const [siteClass, setSiteClass] = useState('D');
@@ -311,6 +312,7 @@ export default function App() {
                     setAddress(displayName);
                     setLat(String(lt));
                     setLon(String(ln));
+                    setSyncLocation({ lat: lt, lon: ln, displayName });
                   }}
                   placeholder="e.g. 1234 Main St, Houston TX"
                 />
@@ -321,11 +323,23 @@ export default function App() {
               <div className="field-row">
                 <div className="field">
                   <label>Latitude</label>
-                  <input className="input" placeholder="e.g. 32.7767" value={lat} onChange={e => setLat(e.target.value)} />
+                  <input className="input" placeholder="e.g. 32.7767" value={lat}
+                    onChange={e => setLat(e.target.value)}
+                    onBlur={() => {
+                      const lt = parseFloat(lat), ln = parseFloat(lon);
+                      if (!isNaN(lt) && !isNaN(ln))
+                        setSyncLocation({ lat: lt, lon: ln, displayName: `${lt.toFixed(5)}, ${ln.toFixed(5)}` });
+                    }} />
                 </div>
                 <div className="field">
                   <label>Longitude</label>
-                  <input className="input" placeholder="e.g. -96.7970" value={lon} onChange={e => setLon(e.target.value)} />
+                  <input className="input" placeholder="e.g. -96.7970" value={lon}
+                    onChange={e => setLon(e.target.value)}
+                    onBlur={() => {
+                      const lt = parseFloat(lat), ln = parseFloat(lon);
+                      if (!isNaN(lt) && !isNaN(ln))
+                        setSyncLocation({ lat: lt, lon: ln, displayName: `${lt.toFixed(5)}, ${ln.toFixed(5)}` });
+                    }} />
                 </div>
               </div>
             )}
@@ -333,11 +347,15 @@ export default function App() {
             {locationMode === 'map' && (
               <div className="field">
                 <label>Click on map to select site location</label>
-                <MapPicker onLocationSelect={({ lat: lt, lon: ln, displayName }) => {
-                  setLat(String(lt));
-                  setLon(String(ln));
-                  setAddress(displayName);
-                }} />
+                <MapPicker
+                  syncLocation={syncLocation}
+                  onLocationSelect={({ lat: lt, lon: ln, displayName }) => {
+                    setLat(String(lt));
+                    setLon(String(ln));
+                    setAddress(displayName);
+                    setSyncLocation({ lat: lt, lon: ln, displayName });
+                  }}
+                />
               </div>
             )}
 
