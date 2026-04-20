@@ -191,8 +191,28 @@ export async function fetchSnow(lat, lon, standard, riskCategory) {
 
     if (snowSamples.status === 'fulfilled') {
       const samples = snowSamples.value.samples || [];
-      if (samples.length && samples[0].value !== 'NoData') {
-        groundSnowLoad = parseFloat(samples[0].value);
+      if (samples.length) {
+        const rawVal = samples[0].value;
+        // value field may be named differently — check all keys
+        const numVal = rawVal != null && String(rawVal).trim() !== 'NoData'
+          ? parseFloat(String(rawVal).trim())
+          : null;
+        if (numVal != null && !isNaN(numVal)) {
+          groundSnowLoad = numVal;
+        }
+      }
+      // If ImageServer returned NoData, try MapServer layer 2 as fallback
+      if (groundSnowLoad === null) {
+        try {
+          const fallback = await arcgisIdentify(
+            `ASCE722/s2022_Tile_RC_${riskCategory}/MapServer`, lat, lon, 'all:2'
+          );
+          const fr = fallback.results || [];
+          if (fr.length) {
+            const pv = fr[0].attributes?.['Classify.Pixel Value'];
+            if (pv != null) groundSnowLoad = parseFloat(pv);
+          }
+        } catch (e) { /* non-fatal */ }
       }
     }
     if (wData.status === 'fulfilled') {
@@ -210,23 +230,32 @@ export async function fetchSnow(lat, lon, standard, riskCategory) {
     }
 
   } else if (standard === '7-16') {
-    // Layer 1 = Snow Load (lb/ft^2), key field = Display
+    // Fetch snow load (layer 1), special case (layer 2), and elevation in parallel
     try {
-      const [snowData716, elevFt716] = await Promise.all([
+      const [snowData716, spData716, elevFt716] = await Promise.all([
         arcgisIdentify('ASCE/Snow_2016_Tile/MapServer', lat, lon, 'all:1'),
+        arcgisIdentify('ASCE/Snow_2016_Tile/MapServer', lat, lon, 'all:2'),
         fetchSiteElevationFt(lat, lon),
       ]);
       siteElevFt = elevFt716;
+
       const results716 = snowData716.results || [];
       if (results716.length) {
         const extracted = extractSnowLoad(results716[0].attributes || {}, siteElevFt);
         groundSnowLoad = extracted.load;
         if (extracted.elevTable) elevationTable = extracted.elevTable;
       }
-    } catch (e) { /* non-fatal */ }
-    try {
-      const spData = await arcgisIdentify('ASCE/Snow_2016_Tile/MapServer', lat, lon, 'all:2');
-      specialCase = (spData.results || []).length > 0;
+
+      // Special case: layer 2 hit AND no meaningful load values (all zeros)
+      const sp716 = spData716.results || [];
+      if (sp716.length) {
+        const spAttrs = sp716[0].attributes || {};
+        // Only flag special case if loads are truly zero/null (not elevation-dependent)
+        const hasRealLoad = [1,2,3,4].some(i =>
+          spAttrs[`Load${i}`] && parseFloat(spAttrs[`Load${i}`]) > 0
+        );
+        specialCase = !hasRealLoad && groundSnowLoad === null;
+      }
     } catch (e) { /* non-fatal */ }
 
   } else {
