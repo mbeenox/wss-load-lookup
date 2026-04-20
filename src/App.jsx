@@ -95,7 +95,7 @@ function RainCard({ rain }) {
               <tr>
                 <th>Duration</th>
                 {headers.map((h, i) => (
-                  <th key={h} className={i === 5 ? 'rain-col-100yr' : ''}>{h}</th>
+                  <th key={h} className={i === 6 ? 'rain-col-100yr' : ''}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -107,8 +107,8 @@ function RainCard({ rain }) {
                     <td>{row.duration}</td>
                     {periods.map((p, i) => (
                       <td key={p} className={
-                        i === 5 && isHighlight ? 'rain-cell-star' :
-                        i === 5 ? 'rain-col-100yr' : ''
+                        i === 6 && isHighlight ? 'rain-cell-star' :
+                        i === 6 ? 'rain-col-100yr' : ''
                       }>
                         {fmt(row.values[p], 3)}
                       </td>
