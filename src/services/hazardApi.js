@@ -285,7 +285,24 @@ export async function fetchRain(lat, lon) {
   const match = text.match(/quantiles\s*=\s*(\[[\s\S]+?\]);/);
   if (!match) return { raw: text, parsed: null };
 
-  const raw = JSON.parse(match[1]);
+  // NOAA uses single-quoted strings — replace with double quotes for valid JSON
+  const jsonStr = match[1]
+    .replace(/'/g, '"')           // single → double quotes
+    .replace(/,\s*]/g, ']')      // trailing commas before ]
+    .replace(/,\s*}/g, '}');     // trailing commas before }
+
+  let raw;
+  try {
+    raw = JSON.parse(jsonStr);
+  } catch (e) {
+    // Fallback: eval-safe extraction using Function
+    try {
+      raw = Function('"use strict"; return (' + match[1] + ')')();
+    } catch (e2) {
+      return { error: 'Could not parse NOAA response: ' + e2.message };
+    }
+  }
+
   const durations = ['5-min','10-min','15-min','30-min','60-min','2-hr','3-hr','6-hr','12-hr','24-hr','2-day','3-day','4-day','7-day','10-day','20-day','30-day','45-day','60-day'];
   const periods = ['2yr','5yr','10yr','25yr','50yr','100yr','200yr','500yr','1000yr'];
   const table = raw.map((row, i) => ({
