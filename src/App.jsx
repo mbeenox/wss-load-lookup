@@ -142,6 +142,8 @@ export default function App() {
   const [riskCategory, setRiskCategory] = useState('II');
   const [siteClass, setSiteClass] = useState('D');
   const [resolvedAddress, setResolvedAddress] = useState('');
+  const [resolvedLat, setResolvedLat] = useState(null);
+  const [resolvedLon, setResolvedLon] = useState(null);
   const [siteElevFt, setSiteElevFt] = useState(null);
 
   const [statuses, setStatuses] = useState({});
@@ -165,6 +167,8 @@ export default function App() {
     setResults({});
     setStatuses({});
     setSiteElevFt(null);
+    setResolvedLat(null);
+    setResolvedLon(null);
     setRunning(true);
 
     let finalLat, finalLon, displayAddr;
@@ -183,6 +187,8 @@ export default function App() {
         displayAddr = geo.displayName;
       }
       setResolvedAddress(displayAddr);
+      setResolvedLat(finalLat);
+      setResolvedLon(finalLon);
     } catch (e) {
       setGlobalError(e.message);
       setRunning(false);
@@ -225,8 +231,8 @@ export default function App() {
   function handleDownloadPDF() {
     const inputs = {
       address: resolvedAddress,
-      lat: useLatLon ? parseFloat(lat) : null,
-      lon: useLatLon ? parseFloat(lon) : null,
+      lat: resolvedLat,
+      lon: resolvedLon,
       standard, riskCategory, siteClass,
     };
     generatePDF(inputs, results);
