@@ -59,8 +59,8 @@ function RainCard({ rain }) {
     return row ? fmt(row.values[period], 3) : 'N/A';
   };
 
-  const periods = ['2yr','5yr','10yr','25yr','50yr','100yr','200yr','500yr','1000yr','10000yr'];
-  const headers = ['2-yr','5-yr','10-yr','25-yr','50-yr','100-yr','200-yr','500-yr','1000-yr','10000-yr'];
+  const periods = ['1yr','2yr','5yr','10yr','25yr','50yr','100yr','200yr','500yr','1000yr'];
+  const headers = ['1-yr','2-yr','5-yr','10-yr','25-yr','50-yr','100-yr','200-yr','500-yr','1000-yr'];
 
   return (
     <div className="rain-card-inner">
